@@ -4,8 +4,10 @@ import logging
 from django.urls import reverse_lazy
 logger = logging.getLogger(__name__)
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from .models import Diary
+from django.shortcuts import get_object_or_404
+
 
 class IndexView(generic.TemplateView):
     template_name = "index.html"
@@ -35,7 +37,24 @@ class DiaryListView(LoginRequiredMixin, generic.ListView):
             order_by('-created_at')
         return diaries
 
-class DiaryDetailView(LoginRequiredMixin, generic.DetailView):
+
+class OnlyYouMixin(UserPassesTestMixin):
+    raise_exception = True
+
+    def test_func(self):
+        #URLに埋め込まれた主キーから日記データを1件取得できなかった場合は404エラー
+        diary = get_object_or_404(Diary, pk=self.kwargs['pk'])
+        #ログインユーザーと日記の作成ユーザーを比較し、異なればraise_exceptionの設定に従う
+        return self.request.user == diary.user
+
+
+
+
+
+
+
+
+class DiaryDetailView(LoginRequiredMixin, OnlyYouMixin, generic.DetailView):
     model = Diary
     template_name = 'diary_detail.html'
 
@@ -59,7 +78,7 @@ class DiaryCreateView(LoginRequiredMixin, generic.CreateView):
         return super().form_invalid(form)
 
 
-class DiaryUpdateView(LoginRequiredMixin, generic.UpdateView):
+class DiaryUpdateView(LoginRequiredMixin, OnlyYouMixin, generic.UpdateView):
     model = Diary
     template_name = 'diary_update.html'
     form_class = DiaryCreateForm
@@ -74,7 +93,7 @@ class DiaryUpdateView(LoginRequiredMixin, generic.UpdateView):
         messages.error(self.request, "日記の更新に失敗しました。")
         return super().form_invalid(form)
 
-class DiaryDeleteView(LoginRequiredMixin, generic.DeleteView):
+class DiaryDeleteView(LoginRequiredMixin, OnlyYouMixin, generic.DeleteView):
     model = Diary
     template_name = 'diary_delete.html'
     success_url = reverse_lazy('diary:diary_list')
